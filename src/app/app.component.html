@@ -1,0 +1,27 @@
+<nav class="game-navbar">
+  <div class="container nav-container">
+    <div class="brand">
+      <span>GameCore</span>
+    </div>
+    <ul class="nav-links">
+      <li><a routerLink="/home" routerLinkActive="active">Home</a></li>
+      <li><a routerLink="/games" routerLinkActive="active">Games</a></li>
+      <li><a routerLink="/leaderboard" routerLinkActive="active">Leaderboard</a></li>
+      <li><a routerLink="/profile" routerLinkActive="active">Profile</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="main-wrapper">
+  <amplify-authenticator [loginMechanisms]="['email']" [signUpAttributes]="['name']" [formFields]="formFields">
+    <ng-template amplifySlot="authenticated" let-user="user" let-signOut="signOut">
+      <section class="welcome-section container text-center mt-5">
+        <h1 class="display-4">Welcome, <span class="username-highlight">{{ user.username }}</span>!</h1>
+        <p class="lead">You have successfully logged in.</p>
+        <button class="btn btn-outline-light mt-3" (click)="signOut()">Sign Out</button>
+      </section>
+
+      <router-outlet></router-outlet>
+    </ng-template>
+  </amplify-authenticator>
+</main>

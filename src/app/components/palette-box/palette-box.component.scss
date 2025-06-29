@@ -1,0 +1,55 @@
+.palette-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3,1fr);
+  gap: 9px;
+}
+
+.square {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.light-box {
+  background-color: #bba278;
+}
+
+.dark-box {
+  background-color: #61553c;
+}
+
+.piece-icon {
+  width: 90%;
+  height: auto;
+  cursor: grab;
+  user-select: none;
+}
+
+.piece-count {
+  position: absolute;
+  top: 0.1px;
+  right: 1px;
+  font-size: 24px;
+  font-weight: 600;
+  background-color: transparent;
+  padding: 1px 2px;
+}
+.light-box .piece-count {
+  color: #61553c; 
+}
+
+.dark-box .piece-count {
+  color:#bba278;
+}

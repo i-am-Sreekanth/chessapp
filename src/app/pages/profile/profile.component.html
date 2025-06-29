@@ -1,0 +1,42 @@
+<div class="profile-container">
+  <div class="avatar-section">
+    <div class="avatar-wrapper">
+      <img [src]="profileImageUrl || defaultAvatar" alt="Profile Picture" class="avatar" />
+      <label class="avatar-upload">
+        <input type="file" accept="image/*" (change)="onProfileImageSelected($event)" />
+        <i class="edit-icon">✏️</i>
+      </label>
+    </div>
+  </div>
+
+  <div class="info-section">
+
+    <!-- Username -->
+    <div class="info-block">
+      <label>Username</label>
+      <div class="info-value">
+        <input
+          *ngIf="isEditingUsername"
+          [(ngModel)]="username"
+          (input)="markDirty()"
+          type="text"
+        />
+        <span *ngIf="!isEditingUsername">{{ username || 'Not set' }}</span>
+        <button (click)="toggleEdit('username')" class="edit-btn">✏️</button>
+      </div>
+    </div>
+
+    <!-- Registered Email -->
+    <div class="info-block">
+      <label>Registered Email</label>
+      <div class="info-value">
+        <span class="readonly">{{ email }}</span>
+      </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="save-container" *ngIf="isDirty">
+      <button (click)="saveChanges()" class="save-btn">Save Changes</button>
+    </div>
+  </div>
+</div>

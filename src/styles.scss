@@ -1,0 +1,124 @@
+@import '@aws-amplify/ui/dist/styles.css';
+body {
+  background: linear-gradient(#806d02c9);
+  color: #eee;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+}
+
+
+.nav-link {
+  color: #ddd;
+  transition: color 0.25s ease;
+  cursor: pointer;
+}
+
+.nav-link:hover, .nav-link.active {
+  color: #ffdd57;
+  font-weight: 600;
+}
+
+.username-highlight {
+  color: #ffdd57;
+  font-weight: 700;
+}
+
+.page-content {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+
+button.btn-outline-light {
+  border-color: #ffdd57;
+  color: #ffdd57;
+}
+
+button.btn-outline-light:hover {
+  background-color: #ffdd57;
+  color: #141e30;
+  transition: 0.3s ease;
+}
+
+.game-navbar {
+  background: #0f0f0f;
+  padding: 1rem 2rem;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  border-bottom: 1px solid #1f1f1f;
+}
+
+.nav-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #00f0ff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.logo {
+  height: 40px;
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 2rem;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-links a {
+  position: relative;
+  color: #ccc;
+  text-decoration: none;
+  font-weight: 00;
+  transition: color 0.3s;
+}
+
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #00f0ff, #ff00f0);
+  transition: width 0.3s ease-in-out;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+  color: #fff;
+}
+
+.nav-links a:hover::after,
+.nav-links a.active::after {
+  width: 100%;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #00f0ff;
+}
+

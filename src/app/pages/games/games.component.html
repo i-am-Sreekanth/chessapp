@@ -1,0 +1,146 @@
+<div class="welcome-text" *ngIf="loggedIn && userEmail">
+  👋 Welcome, {{ userEmail }}
+</div>
+
+<nav class="navbar fixed-top">
+  <div class="container-fluid">
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="offcanvas"
+      data-bs-target="#offcanvasMenu"
+      aria-controls="offcanvasMenu"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <a class="navbar-brand ms-2" href="#">Chess App</a>
+  </div>
+</nav>
+
+<div
+  class="offcanvas offcanvas-start"
+  tabindex="-1"
+  id="offcanvasMenu"
+  aria-labelledby="offcanvasMenuLabel"
+  style="position: fixed;"
+>
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="offcanvasMenuLabel">Settings</h5>
+    <button
+      type="button"
+      class="btn-close btn-close-white"
+      data-bs-dismiss="offcanvas"
+      aria-label="Close"
+    ></button>
+  </div>
+  <div class="offcanvas-body">
+    <!-- ...your settings controls remain unchanged... -->
+  </div>
+</div>
+
+<!-- SPACER BELOW NAVBAR -->
+<div style="margin-top: 90px;"></div>
+
+<!-- ✅ FINAL MAIN LAYOUT CONTAINER -->
+<div class="main-game-layout">
+
+  <!-- ✅ LEFT CONTROLS PANEL -->
+  <div class="left-controls-panel">
+    <div class="control-block">
+      <label for="fenInput"><strong>FEN</strong></label>
+      <input id="fenInput" [(ngModel)]="fen" type="text" class="form-control mb-2" />
+      <div class="button-row">
+        <button class="btn btn-success" (click)="setFen()">Set</button>
+        <button class="btn btn-info" (click)="getFEN()">Show</button>
+      </div>
+    </div>
+
+    <div class="control-block">
+      <label for="pgnInput"><strong>PGN</strong></label>
+      <textarea id="pgnInput" [(ngModel)]="pgn" rows="4" class="form-control mb-2"></textarea>
+      <div class="button-row">
+        <button class="btn btn-success" (click)="setPgn()">Set</button>
+        <button class="btn btn-secondary" (click)="loadDefaultPgn()">Example</button>
+        <button class="btn btn-warning" (click)="getPGN()">Get</button>
+      </div>
+    </div>
+
+    <div class="control-block">
+      <label for="manualMove"><strong>Manual Move</strong></label>
+      <div class="input-group">
+        <input [(ngModel)]="manualMove" type="text" id="manualMove" class="form-control" />
+        <button class="btn btn-primary" (click)="moveManual()">Move</button>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label>Add Piece (Free Mode)</label>
+      <div class="input-group">
+        <input [(ngModel)]="addPieceCoords" type="text" class="form-control" />
+        <select [(ngModel)]="selectedPiece" class="form-select">
+          <option value="1">Queen</option>
+          <option value="2">King</option>
+          <option value="3">Rook</option>
+          <option value="4">Bishop</option>
+          <option value="5">Knight</option>
+          <option value="6">Pawn</option>
+        </select>
+        <select [(ngModel)]="selectedColor" class="form-select">
+          <option value="1">Light</option>
+          <option value="2">Dark</option>
+        </select>
+        <button class="btn btn-primary" (click)="addPiece()" [disabled]="!freeMode">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ CHESS BOARD + PALETTE -->
+  <div class="chessboard-palette-wrapper">
+
+    <!-- CHESS BOARD -->
+    <div class="chess-board-container">
+      <div
+        id="board-drop-wrapper"
+        (dragover)="onBoardDragOver($event)"
+        (drop)="onBoardDrop($event)"
+      >
+        <div class="board-wrapper" style="position: relative;">
+          <ngx-chess-board
+            #board
+            [size]="size"
+            [lightTileColor]="lightTileColor"
+            [darkTileColor]="darkTileColor"
+            [dragDisabled]="dragDisabled"
+            [drawDisabled]="drawDisabled"
+            [lightDisabled]="lightDisabled"
+            [darkDisabled]="darkDisabled"
+            [freeMode]="true"
+            [showLegalMoves]="false"
+            [showLastMove]="true"
+            [showPossibleCaptures]="true"
+            [showActivePiece]="true"
+            (moveChange)="moveCallback($event)"
+          ></ngx-chess-board>
+        </div>
+      </div>
+    </div>
+
+    <!-- PALETTE COLUMN -->
+    <div class="palette-column">
+      <app-palette-box
+        [playerColor]="'white'"
+        [boardSize]="size"
+        (pieceUsed)="decrementPiece($event, 'white')"
+        (pieceDragEnd)="onDragEnd()"
+      ></app-palette-box>
+
+      <app-palette-box
+        [playerColor]="'black'"
+        [boardSize]="size"
+        (pieceUsed)="decrementPiece($event, 'black')"
+        (pieceDragEnd)="onDragEnd()"
+      ></app-palette-box>
+    </div>
+
+  </div>  
+</div>

@@ -1,0 +1,25 @@
+<div class="palette-wrapper">
+  <div class="palette-grid">
+    <div
+  class="square"
+  *ngFor="let piece of pieces"
+  [ngClass]="playerColor === 'white' ? 'dark-box' : 'light-box'"
+>
+      
+
+      <div class="piece-count">
+        {{ pieceCounts ? (pieceCounts[piece.name] || 0) : piece.count }}
+      </div>
+
+      <img
+        [src]="piece.icon"
+        alt="{{ piece.name }}"
+        class="piece-icon"
+        draggable="true"
+        (dragstart)="onDragStart($event, piece)"
+        (dragend)="pieceDragEnd.emit()"
+        [class.disabled]="(pieceCounts ? (pieceCounts[piece.name] || 0) : piece.count) === 0"
+      />
+    </div>
+  </div>
+</div>
