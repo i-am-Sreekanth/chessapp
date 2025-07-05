@@ -1,68 +1,84 @@
-import { Injectable, DestroyRef, inject } from '@angular/core';
-import { Subject, Observable } from 'rxjs';
+import { Injectable } from '@angular/core';
+import { Subject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class WebsocketService {
-  private socket!: WebSocket;
+  private socket: WebSocket | null = null;
   private messageSubject = new Subject<any>();
-  private destroyRef = inject(DestroyRef);
 
-  constructor() {
-    // Auto-clean when service is destroyed (Angular v17 feature)
-    this.destroyRef.onDestroy(() => this.close());
-  }
+  private readonly WS_URL = 'wss://mse1rzqm0g.execute-api.ap-southeast-2.amazonaws.com/production/';
 
-  /**
-   * Connects to a WebSocket server
-   * @param url The WebSocket endpoint (e.g., ws://localhost:3000)
-   */
-  connect(url: string): Observable<any> {
-    this.socket = new WebSocket(url);
+  connect(): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      this.socket = new WebSocket(this.WS_URL);
 
-    this.socket.onopen = () => {
-      console.log('[WebSocket] Connected to:', url);
-    };
+      this.socket.onopen = () => {
+        console.log('[WebSocket] Connected');
+      };
 
-    this.socket.onmessage = (event) => {
-      try {
+      this.socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        this.messageSubject.next(data);
-      } catch {
-        this.messageSubject.next(event.data); // fallback for plain strings
-      }
-    };
 
-    this.socket.onerror = (err) => {
-      console.error('[WebSocket] Error:', err);
-    };
+        if (data.action === 'initGameState') {
+          console.log('[WebSocket] Received initGameState');
+          this.messageSubject.next({
+            type: 'init',
+            fen: data.fen,
+            pgn: data.pgn
+          });
+        } else if (data.action === 'move') {
+          this.messageSubject.next({
+            type: 'move',
+            move: data.move,
+            fen: data.fen,
+            pgn: data.pgn
+          });
+        } else {
+          console.log('[WebSocket] Unknown action:', data);
+        }
+      };
 
-    this.socket.onclose = () => {
-      console.log('[WebSocket] Connection closed.');
-    };
+      this.socket.onerror = (err) => {
+        console.error('[WebSocket] Error:', err);
+      };
 
-    return this.messageSubject.asObservable();
+      this.socket.onclose = () => {
+        console.warn('[WebSocket] Disconnected');
+      };
+    }
   }
 
-  /**
-   * Sends a message through the WebSocket
-   * @param data Any serializable object
-   */
-  send(data: any): void {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(data));
+  sendMove(roomId: string, move: { from: string; to: string }, fen: string, pgn: string): void {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      const msg = JSON.stringify({
+        action: 'sendMove',
+        roomId,
+        move,
+        fen,
+        pgn
+      });
+      this.socket.send(msg);
     } else {
-      console.warn('[WebSocket] Cannot send message — socket not open');
+      console.warn('[WebSocket] Cannot send move, socket not open');
     }
   }
 
-  /**
-   * Closes the WebSocket connection
-   */
-  close(): void {
-    if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
-      this.socket.close();
+  sendMessage(action: string, payload: any): void {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      const msg = JSON.stringify({ action, ...payload });
+      this.socket.send(msg);
+    } else {
+      console.warn('[WebSocket] Cannot send, socket not open');
     }
+  }
+
+  disconnect(): void {
+    this.socket?.close();
+  }
+
+  onMessage() {
+    return this.messageSubject.asObservable();
   }
 }

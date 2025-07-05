@@ -1,4 +1,10 @@
-import { Component, ViewChild, AfterViewInit, OnInit } from '@angular/core';
+import {
+  Component,
+  ViewChild,
+  AfterViewInit,
+  OnInit,
+  OnDestroy
+} from '@angular/core';
 import { Router } from '@angular/router';
 import {
   NgxChessBoardComponent,
@@ -14,6 +20,12 @@ import { PaletteBoxComponent } from '../../components/palette-box/palette-box.co
 import { FenComponent } from '../../components/fen/fen.component';
 import { isUserLoggedIn } from '../app.utils';
 import { getCurrentUser } from '@aws-amplify/auth';
+import { RoomService } from '../../services/room.service';
+import { WebsocketService } from '../../services/websocket.service';
+import { nanoid } from 'nanoid';
+import { ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { ChangeDetectorRef } from '@angular/core';
 
 interface CustomMoveHistory {
   move: string;
@@ -22,7 +34,7 @@ interface CustomMoveHistory {
 }
 
 @Component({
-  selector: 'app-games',
+  selector: 'app-game',
   standalone: true,
   imports: [
     CommonModule,
@@ -30,13 +42,24 @@ interface CustomMoveHistory {
     NgxChessBoardModule,
     PaletteBoxComponent
   ],
-  templateUrl: 'games.component.html',
-  styleUrls: ['games.component.scss']
+  templateUrl: './games.component.html',
+  styleUrls: ['./games.component.scss']
 })
-export class GamesComponent implements AfterViewInit, OnInit {
+export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   @ViewChild('board') boardManager!: NgxChessBoardComponent;
   @ViewChild('fenManager') fenManager!: FenComponent;
 
+  player1Name: string = 'player 1';  
+  player2Name: string = 'player 2';
+
+  // === Multiplayer WebSocket Subscription ===
+  private sub!: Subscription;
+
+  // === Multiplayer ===
+  joinCode = '';
+  gameLink = '';
+
+  // === Chess Settings ===
   public fen = '8/8/8/8/8/8/8/8 w - - 0 1';
   public manualMove = 'd2d4';
   public pgn = '';
@@ -82,14 +105,88 @@ export class GamesComponent implements AfterViewInit, OnInit {
   };
 
   board: (string | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
-
-  constructor(private router: Router) {
+  
+  constructor(
+    private router: Router,
+    private route: ActivatedRoute,
+    public roomService: RoomService,
+    private cdr: ChangeDetectorRef,
+    private wsService: WebsocketService
+  ) {
     ['King', 'Queen', 'Rook', 'Bishop', 'Knight', 'Pawn'].forEach(piece => {
       this.whitePieces.set(piece, 0);
       this.blackPieces.set(piece, 0);
     });
   }
+    private rooms: Map<string, { fen: string; pgn: string; clients: Set<WebSocket> }> = new Map();
+  // === Multiplayer Join/Create ===
+  joinGame() {
+  const trimmedRoom = this.joinCode.trim();
+  
+  
+this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+this.pgn = '';
+this.freeMode = false;
 
+this.roomService.setRoomId(trimmedRoom);
+this.wsService.connect();
+this.wsService.sendMessage('joinRoom', { roomId: trimmedRoom });
+this.router.navigate([], {
+  relativeTo: this.route,
+  queryParams: { room: trimmedRoom },
+  queryParamsHandling: 'merge',
+
+  });
+  }
+  
+
+
+  createGame() {
+    const roomId = nanoid(6).toUpperCase();
+    this.roomService.setRoomId(roomId);
+    this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+    this.freeMode = true;
+    this.wsService.connect();
+    this.wsService.sendMessage('createRoom', 
+      { roomId,
+        fen: this.boardManager.getFEN(),
+        pgn: this.boardManager.getPGN()
+      });
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { room: roomId },
+      queryParamsHandling: 'merge',
+    });
+    
+
+
+  setTimeout(() => {
+    if (this.boardManager) {
+      this.boardManager.setFEN('8/8/8/8/8/8/8/8 w - - 0 1');
+      this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+      this.freeMode = true;
+    }
+  }, 1);
+  
+}
+
+  // === WebSocket Move Handling ===
+  onMove(event: { from: string; to: string }): void {
+  const fen = this.boardManager.getFEN();
+  const pgn = this.boardManager.getPGN();
+  this.wsService.sendMessage('sendMove', {
+    roomId: this.roomService.getRoomId(),
+    move: {
+      from: event.from,
+      to: event.to
+    },
+    fen,
+    pgn
+  });
+}
+
+  // === Angular Lifecycle ===
   async ngOnInit() {
     const result = await isUserLoggedIn();
     this.loggedIn = result;
@@ -98,20 +195,77 @@ export class GamesComponent implements AfterViewInit, OnInit {
       this.redirecting = true;
       setTimeout(() => {
         this.router.navigate(['/login'], { queryParams: { returnUrl: '/games' } });
-      }, 2000);
+      }, 200);
+      return;
     } else {
       try {
         const user = await getCurrentUser();
-        this.userEmail = user.signInDetails?.loginId || 'Unknown';
+        console.log('User Info:', user);
+        this.userEmail = user.signInDetails?.loginId || 'Umknown';
+        this.cdr.detectChanges();
       } catch (err) {
         console.error('🔴 Could not fetch user info:', err);
       }
     }
+
+
+
+    // === WebSocket Message Subscription ===
+  this.sub = this.wsService.onMessage().subscribe((msg) => {
+    console.log('[WebSocket] Incoming Message:', msg);
+  if (msg.action === 'move' && msg.roomId === this.roomService.getRoomId()) {
+    this.boardManager.move(`${msg.move.from}${msg.move.to}`);
+    this.fen = msg.fen;
+    this.pgn = msg.pgn;
+  }
+
+  if (msg.action === 'boardState' && msg.roomId === this.roomService.getRoomId()) {
+    this.boardManager.setFEN(msg.fen);
+    this.fen = msg.fen;
+    this.pgn = msg.pgn;
+    this.freeMode = true;
+  }
+
+  if (msg.action === 'initGameState' && msg.roomId === this.roomService.getRoomId()) {
+    console.log('[WebSocket] Applying initGameState');
+    this.boardManager.setFEN(msg.fen);
+    this.fen = msg.fen;
+    this.pgn = msg.pgn;
+    this.boardManager.setPGN(msg.pgn);
+    this.freeMode = true;
+  }
+  if (msg.action === 'roomNotFound') {
+  alert(`Room "${msg.roomId}" does not exist.`);
+  this.router.navigate(['/games']);  // or show UI error
+  return;
+
+}
+});
   }
 
   ngAfterViewInit(): void {
-    this.boardManager.setFEN(this.fen);
+  this.boardManager.setFEN(this.fen);
+
+  const roomFromUrl = this.route.snapshot.queryParamMap.get('room');
+  if (roomFromUrl) {
+    this.roomService.setRoomId(roomFromUrl);
+    this.wsService.sendMessage('joinRoom', { roomId: roomFromUrl });
   }
+}
+
+
+  ngOnDestroy(): void {
+    this.sub?.unsubscribe();
+  }
+
+  // === Chess Logic ===
+  private broadcastState(action = 'boardState'): void {
+  this.wsService.sendMessage(action, {
+    roomId: this.roomService.getRoomId(),
+    fen: this.boardManager.getFEN(),
+    pgn: this.boardManager.getPGN()
+  });
+}
 
   toggleDarkMode(enabled: boolean): void {
     this.isDarkMode = enabled;
@@ -162,10 +316,12 @@ export class GamesComponent implements AfterViewInit, OnInit {
   }
 
   placePieceOnBoard(square: string, piece: { name: string; color: string }) {
-    const type = this.mapPieceNameToPieceType(piece.name);
-    const color = piece.color === 'white' ? ColorInput.LIGHT : ColorInput.DARK;
-    this.boardManager.addPiece(type, color, square);
-  }
+  const type = this.mapPieceNameToPieceType(piece.name);
+  const color = piece.color === 'white' ? ColorInput.LIGHT : ColorInput.DARK;
+  this.boardManager.addPiece(type, color, square);
+  this.broadcastState('boardState');
+}
+
 
   private mapPieceNameToPieceType(name: string): PieceTypeInput {
     switch (name.toLowerCase()) {
@@ -186,6 +342,7 @@ export class GamesComponent implements AfterViewInit, OnInit {
     this.freeMode = false;
     this.moveHistory = [];
     this.currentStateIndex = -1;
+    this.broadcastState();
   }
 
   public reverse(): void { this.boardManager.reverse(); }
@@ -194,9 +351,13 @@ export class GamesComponent implements AfterViewInit, OnInit {
     this.boardManager.undo();
     this.fen = this.boardManager.getFEN();
     this.pgn = this.boardManager.getPGN();
+    this.broadcastState();
   }
 
-  public setFen(): void { if (this.fen) this.boardManager.setFEN(this.fen); }
+  public setFen():void {
+  this.boardManager.setFEN(this.fen);
+  this.broadcastState();
+}
 
   public moveManual(): void { this.boardManager.move(this.manualMove); }
 
@@ -220,6 +381,7 @@ export class GamesComponent implements AfterViewInit, OnInit {
     const piece = this.resolveSelectedPiece();
     const color = this.resolveSelectedColor();
     this.boardManager.addPiece(piece, color, this.addPieceCoords);
+    this.broadcastState();
   }
 
   private resolveSelectedPiece(): PieceTypeInput {
@@ -285,15 +447,37 @@ export class GamesComponent implements AfterViewInit, OnInit {
   }
 
   public moveCallback(move: MoveChange): void {
-    this.fen = this.boardManager.getFEN();
-    this.pgn = this.boardManager.getPGN();
-    const newMove: CustomMoveHistory = {
-      move: move.move,
-      fen: this.fen,
-      pgn: this.pgn
-    };
-    this.moveHistory = this.moveHistory.slice(0, this.currentStateIndex + 1);
-    this.moveHistory.push(newMove);
-    this.currentStateIndex = this.moveHistory.length - 1;
+  this.fen = this.boardManager.getFEN();
+  this.pgn = this.boardManager.getPGN();
+
+  // Save in local history
+  const newMove: CustomMoveHistory = {
+    move: move.move,
+    fen: this.fen,
+    pgn: this.pgn
+  };
+  this.moveHistory = this.moveHistory.slice(0, this.currentStateIndex + 1);
+  this.moveHistory.push(newMove);
+  this.currentStateIndex = this.moveHistory.length - 1;
+
+  // Broadcast move to backend
+  const from = move.move.substring(0, 2);
+  const to = move.move.substring(2, 4);
+  this.wsService.sendMessage('sendMove', {
+    roomId: this.roomService.getRoomId(),
+    move: { from, to },
+    fen: this.fen,
+    pgn: this.pgn
+  });
+}
+
+
+  copyToClipboard(text: string): void {
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Link copied to clipboard!');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    });
   }
+
 }

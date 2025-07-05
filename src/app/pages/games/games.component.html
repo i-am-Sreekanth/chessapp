@@ -1,7 +1,9 @@
+<!-- User Welcome -->
 <div class="welcome-text" *ngIf="loggedIn && userEmail">
-  👋 Welcome, {{ userEmail }}
+  Welcome {{ userEmail }} | You are logged in
 </div>
 
+<!-- NAVBAR -->
 <nav class="navbar fixed-top">
   <div class="container-fluid">
     <button
@@ -17,6 +19,7 @@
   </div>
 </nav>
 
+<!-- OFFCANVAS MENU -->
 <div
   class="offcanvas offcanvas-start"
   tabindex="-1"
@@ -34,21 +37,54 @@
     ></button>
   </div>
   <div class="offcanvas-body">
-    <!-- ...your settings controls remain unchanged... -->
+    <!-- Settings controls here -->
   </div>
 </div>
 
 <!-- SPACER BELOW NAVBAR -->
-<div style="margin-top: 90px;"></div>
+<div style="height: 90px;"></div>
 
-<!-- ✅ FINAL MAIN LAYOUT CONTAINER -->
-<div class="main-game-layout">
+<!-- MAIN LAYOUT CONTAINER -->
+<div class="main-layout-container">
 
-  <!-- ✅ LEFT CONTROLS PANEL -->
-  <div class="left-controls-panel">
+  <!-- LEFT PANEL: Lobby + Controls -->
+  <div class="left-panel">
+    <!-- Multiplayer Lobby -->
+    <div class="lobby-box">
+      <h2 class="lobby-title">Multiplayer Lobby</h2>
+
+      <!-- Join Game -->
+      <div class="lobby-section">
+        <label class="lobby-label">Join a game</label>
+        <input
+          [(ngModel)]="joinCode"
+          class="lobby-input"
+          placeholder="Enter Room ID"
+        />
+        <button (click)="joinGame()" class="lobby-button join-button" [disabled]="roomService.getRoomId()">
+          Join Game
+        </button>
+      </div>
+
+      <!-- Create Game -->
+      <div class="lobby-section lobby-divider">
+        <label class="lobby-label">Create a new game?</label>
+        <button (click)="createGame()" class="lobby-button create-button">
+          Create Game
+        </button>
+        <div *ngIf="roomService.getRoomId()" class="lobby-share">
+          Share this ID: <strong>{{ roomService.getRoomId() }}</strong><br />
+          Or share this link: <br />
+          <span class="lobby-link">{{ gameLink }}</span>
+          <button class="btn btn-sm btn-outline-primary mt-1" (click)="copyToClipboard(gameLink)">Copy Link</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FEN / PGN / Move Controls -->
     <div class="control-block">
-      <label for="fenInput"><strong>FEN</strong></label>
-      <input id="fenInput" [(ngModel)]="fen" type="text" class="form-control mb-2" />
+      <label><strong>FEN</strong></label>
+      <input [(ngModel)]="fen" type="text" class="form-control mb-2" />
       <div class="button-row">
         <button class="btn btn-success" (click)="setFen()">Set</button>
         <button class="btn btn-info" (click)="getFEN()">Show</button>
@@ -56,8 +92,8 @@
     </div>
 
     <div class="control-block">
-      <label for="pgnInput"><strong>PGN</strong></label>
-      <textarea id="pgnInput" [(ngModel)]="pgn" rows="4" class="form-control mb-2"></textarea>
+      <label><strong>PGN</strong></label>
+      <textarea [(ngModel)]="pgn" rows="4" class="form-control mb-2"></textarea>
       <div class="button-row">
         <button class="btn btn-success" (click)="setPgn()">Set</button>
         <button class="btn btn-secondary" (click)="loadDefaultPgn()">Example</button>
@@ -66,14 +102,15 @@
     </div>
 
     <div class="control-block">
-      <label for="manualMove"><strong>Manual Move</strong></label>
+      <label><strong>Manual Move</strong></label>
       <div class="input-group">
-        <input [(ngModel)]="manualMove" type="text" id="manualMove" class="form-control" />
+        <input [(ngModel)]="manualMove" type="text" class="form-control" />
         <button class="btn btn-primary" (click)="moveManual()">Move</button>
       </div>
     </div>
 
-    <div class="mb-3">
+    <!-- Add Piece -->
+    <div>
       <label>Add Piece (Free Mode)</label>
       <div class="input-group">
         <input [(ngModel)]="addPieceCoords" type="text" class="form-control" />
@@ -94,53 +131,63 @@
     </div>
   </div>
 
-  <!-- ✅ CHESS BOARD + PALETTE -->
-  <div class="chessboard-palette-wrapper">
+  <!-- CENTER PANEL -->
+  <div class="center-panel" *ngIf="roomService.getRoomId(); else notInRoom">
+    <div class="chess-display-box">
 
-    <!-- CHESS BOARD -->
-    <div class="chess-board-container">
-      <div
-        id="board-drop-wrapper"
-        (dragover)="onBoardDragOver($event)"
-        (drop)="onBoardDrop($event)"
-      >
-        <div class="board-wrapper" style="position: relative;">
-          <ngx-chess-board
-            #board
-            [size]="size"
-            [lightTileColor]="lightTileColor"
-            [darkTileColor]="darkTileColor"
-            [dragDisabled]="dragDisabled"
-            [drawDisabled]="drawDisabled"
-            [lightDisabled]="lightDisabled"
-            [darkDisabled]="darkDisabled"
-            [freeMode]="true"
-            [showLegalMoves]="false"
-            [showLastMove]="true"
-            [showPossibleCaptures]="true"
-            [showActivePiece]="true"
-            (moveChange)="moveCallback($event)"
-          ></ngx-chess-board>
+      <div class="player-name player-top">{{ player1Name || userEmail }}</div>
+
+      <div class="chessboard-palette-wrapper">
+        <div class="chess-board-container">
+          <div id="board-drop-wrapper" (dragover)="onBoardDragOver($event)" (drop)="onBoardDrop($event)">
+            <div class="board-wrapper" style="position: relative;">
+              <ngx-chess-board
+                #board
+                [size]="size"
+                [lightTileColor]="lightTileColor"
+                [darkTileColor]="darkTileColor"
+                [dragDisabled]="dragDisabled"
+                [drawDisabled]="drawDisabled"
+                [lightDisabled]="lightDisabled"
+                [darkDisabled]="darkDisabled"
+                [freeMode]="true"
+                [showLegalMoves]="false"
+                [showLastMove]="true"
+                [showPossibleCaptures]="true"
+                [showActivePiece]="true"
+                (moveChange)="moveCallback($event)"
+                (moveChange)="onMove($event)">
+              </ngx-chess-board>
+            </div>
+          </div>
+        </div>
+
+        <div class="palette-column">
+          <app-palette-box
+            [playerColor]="'white'"
+            [boardSize]="size"
+            (pieceUsed)="decrementPiece($event, 'white')"
+            (pieceDragEnd)="onDragEnd()">
+          </app-palette-box>
+
+          <app-palette-box
+            [playerColor]="'black'"
+            [boardSize]="size"
+            (pieceUsed)="decrementPiece($event, 'black')"
+            (pieceDragEnd)="onDragEnd()">
+          </app-palette-box>
         </div>
       </div>
+
+      <div class="player-name player-bottom">{{ player2Name || 'Player 2' }}</div>
+
     </div>
+  </div>
 
-    <!-- PALETTE COLUMN -->
-    <div class="palette-column">
-      <app-palette-box
-        [playerColor]="'white'"
-        [boardSize]="size"
-        (pieceUsed)="decrementPiece($event, 'white')"
-        (pieceDragEnd)="onDragEnd()"
-      ></app-palette-box>
-
-      <app-palette-box
-        [playerColor]="'black'"
-        [boardSize]="size"
-        (pieceUsed)="decrementPiece($event, 'black')"
-        (pieceDragEnd)="onDragEnd()"
-      ></app-palette-box>
+  <!-- Message if no room joined -->
+  <ng-template #notInRoom>
+    <div class="alert alert-info mt-3">
+      Join or create a room to start playing.
     </div>
-
-  </div>  
+  </ng-template>
 </div>
