@@ -1,0 +1,28 @@
+<div style="height: 100vh; display: flex; flex-direction: column; padding: 16px;">
+  <div style="flex: 1; overflow-y: auto;">
+    <div *ngFor="let msg of messages">
+      <div [ngClass]="{'my-msg': msg.user === currentUser, 'other-msg': msg.user !== currentUser}">
+        {{ msg.text }} <small>{{ msg.date | date:'shortTime' }}</small>
+      </div>
+    </div>
+  </div>
+
+  <dx-text-box
+    [showClearButton]="true"
+    [placeholder]="'Type your message...'"
+    (onEnterKey)="sendMessage($event)">
+  </dx-text-box>
+  <dx-chat
+  [user]="currentUser"
+  [items]="messages"
+  [typingUsers]="typingUsers"
+  [showAvatar]="true"
+  [showDayHeaders]="false"
+  (onMessageEntered)="onMessageEntered($event)"
+  (onTypingStart)="onTypingStart()"
+  (onTypingEnd)="onTypingEnd()"
+  [width]="'100%'"
+  [height]="'100%'">
+</dx-chat>
+
+</div>

@@ -3,9 +3,11 @@ import {
   ViewChild,
   AfterViewInit,
   OnInit,
-  OnDestroy
+  OnDestroy,
+  ChangeDetectorRef,
+  signal
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import {
   NgxChessBoardComponent,
   MoveChange,
@@ -19,13 +21,14 @@ import { FormsModule } from '@angular/forms';
 import { PaletteBoxComponent } from '../../components/palette-box/palette-box.component';
 import { FenComponent } from '../../components/fen/fen.component';
 import { isUserLoggedIn } from '../app.utils';
-import { getCurrentUser } from '@aws-amplify/auth';
+import { getCurrentUser, signOut } from '@aws-amplify/auth';
 import { RoomService } from '../../services/room.service';
-import { WebsocketService } from '../../services/websocket.service';
+import { WebSocketService } from '../../services/websocket.service';
 import { nanoid } from 'nanoid';
-import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { ChangeDetectorRef } from '@angular/core';
+import { ChatComponent } from '../chat/chat.component';
+import { DxChatModule } from 'devextreme-angular';
+import { DxChatTypes } from 'devextreme-angular/ui/chat';
 
 interface CustomMoveHistory {
   move: string;
@@ -40,26 +43,22 @@ interface CustomMoveHistory {
     CommonModule,
     FormsModule,
     NgxChessBoardModule,
+    DxChatModule,
     PaletteBoxComponent
   ],
   templateUrl: './games.component.html',
-  styleUrls: ['./games.component.scss']
+  styleUrls: ['./games.component.scss'],
 })
 export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   @ViewChild('board') boardManager!: NgxChessBoardComponent;
   @ViewChild('fenManager') fenManager!: FenComponent;
 
-  player1Name: string = 'player 1';  
+  player1Name: string = 'player 1';
   player2Name: string = 'player 2';
-
-  // === Multiplayer WebSocket Subscription ===
   private sub!: Subscription;
-
-  // === Multiplayer ===
   joinCode = '';
   gameLink = '';
 
-  // === Chess Settings ===
   public fen = '8/8/8/8/8/8/8/8 w - - 0 1';
   public manualMove = 'd2d4';
   public pgn = '';
@@ -90,6 +89,7 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   loggedIn = false;
   redirecting = false;
   userEmail: string = '';
+  user = signal<any | null>(null);
 
   whitePaletteCounts: { [key: string]: number } = {
     King: 1, Queen: 1, Rook: 2, Bishop: 2, Knight: 2, Pawn: 8
@@ -105,88 +105,58 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   };
 
   board: (string | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
-  
+  private rooms: Map<string, { fen: string; pgn: string; clients: Set<WebSocket> }> = new Map();
+
+  // Chat-related state
+  currentUser: DxChatTypes.User = { id: '1', name: 'Player 1' };
+  messages: DxChatTypes.Message[] = [];
+  typingUsers: DxChatTypes.User[] = [];
+
   constructor(
     private router: Router,
     private route: ActivatedRoute,
     public roomService: RoomService,
     private cdr: ChangeDetectorRef,
-    private wsService: WebsocketService
+    private wsService: WebSocketService
   ) {
     ['King', 'Queen', 'Rook', 'Bishop', 'Knight', 'Pawn'].forEach(piece => {
       this.whitePieces.set(piece, 0);
       this.blackPieces.set(piece, 0);
     });
-  }
-    private rooms: Map<string, { fen: string; pgn: string; clients: Set<WebSocket> }> = new Map();
-  // === Multiplayer Join/Create ===
-  joinGame() {
-  const trimmedRoom = this.joinCode.trim();
-  
-  
-this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
-this.pgn = '';
-this.freeMode = false;
 
-this.roomService.setRoomId(trimmedRoom);
-this.wsService.connect();
-this.wsService.sendMessage('joinRoom', { roomId: trimmedRoom });
-this.router.navigate([], {
-  relativeTo: this.route,
-  queryParams: { room: trimmedRoom },
-  queryParamsHandling: 'merge',
-
-  });
-  }
-  
-
-
-  createGame() {
-    const roomId = nanoid(6).toUpperCase();
-    this.roomService.setRoomId(roomId);
-    this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
-    this.freeMode = true;
-    this.wsService.connect();
-    this.wsService.sendMessage('createRoom', 
-      { roomId,
-        fen: this.boardManager.getFEN(),
-        pgn: this.boardManager.getPGN()
-      });
-
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { room: roomId },
-      queryParamsHandling: 'merge',
+    // WebSocket subscription for chat
+    this.wsService.onReceive().subscribe(msg => {
+      if (msg.type === 'chat') {
+        this.messages = [...this.messages, msg.payload];
+      }
+      if (msg.type === 'typing') {
+        this.typingUsers = msg.payload ? [msg.payload] : [];
+      }
     });
-    
+  }
 
+  // Chat methods
+  onMessageEntered(e: DxChatTypes.MessageEnteredEvent) {
+    const newMsg: DxChatTypes.Message = e.message;
+    this.messages = [...this.messages, newMsg];
+    this.wsService.send({ type: 'chat', payload: newMsg });
+  }
 
-  setTimeout(() => {
-    if (this.boardManager) {
-      this.boardManager.setFEN('8/8/8/8/8/8/8/8 w - - 0 1');
-      this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
-      this.freeMode = true;
+  onTypingStart() {
+    this.wsService.send({ type: 'typing', payload: this.currentUser });
+  }
+
+  onTypingEnd() {
+    this.wsService.send({ type: 'typing', payload: null });
+  }
+
+  sendMessage(e: any) {
+    const text = e.value;
+    if (text) {
+      this.messages.push({ text, user: this.currentUser, date: new Date() });
+      e.component.reset();
     }
-  }, 1);
-  
-}
-
-  // === WebSocket Move Handling ===
-  onMove(event: { from: string; to: string }): void {
-  const fen = this.boardManager.getFEN();
-  const pgn = this.boardManager.getPGN();
-  this.wsService.sendMessage('sendMove', {
-    roomId: this.roomService.getRoomId(),
-    move: {
-      from: event.from,
-      to: event.to
-    },
-    fen,
-    pgn
-  });
-}
-
-  // === Angular Lifecycle ===
+  }
   async ngOnInit() {
     const result = await isUserLoggedIn();
     this.loggedIn = result;
@@ -201,72 +171,123 @@ this.router.navigate([], {
       try {
         const user = await getCurrentUser();
         console.log('User Info:', user);
-        this.userEmail = user.signInDetails?.loginId || 'Umknown';
+        this.userEmail = user.signInDetails?.loginId || user.username || 'Unknown';
         this.cdr.detectChanges();
       } catch (err) {
         console.error('🔴 Could not fetch user info:', err);
       }
     }
 
+    this.sub = this.wsService.onMessage().subscribe((msg) => {
+      console.log('[WebSocket] Incoming Message:', msg);
 
+      if (msg.action === 'move' && msg.roomId === this.roomService.getRoomId()) {
+        this.boardManager.move(`${msg.move.from}${msg.move.to}`);
+        this.fen = msg.fen;
+        this.pgn = msg.pgn;
+      }
 
-    // === WebSocket Message Subscription ===
-  this.sub = this.wsService.onMessage().subscribe((msg) => {
-    console.log('[WebSocket] Incoming Message:', msg);
-  if (msg.action === 'move' && msg.roomId === this.roomService.getRoomId()) {
-    this.boardManager.move(`${msg.move.from}${msg.move.to}`);
-    this.fen = msg.fen;
-    this.pgn = msg.pgn;
-  }
+      if (msg.action === 'boardState' && msg.roomId === this.roomService.getRoomId()) {
+        this.boardManager.setFEN(msg.fen);
+        this.fen = msg.fen;
+        this.pgn = msg.pgn;
+        this.freeMode = true;
+      }
 
-  if (msg.action === 'boardState' && msg.roomId === this.roomService.getRoomId()) {
-    this.boardManager.setFEN(msg.fen);
-    this.fen = msg.fen;
-    this.pgn = msg.pgn;
-    this.freeMode = true;
-  }
+      if (msg.action === 'initGameState' && msg.roomId === this.roomService.getRoomId()) {
+        console.log('[WebSocket] Applying initGameState');
+        this.boardManager.setFEN(msg.fen);
+        this.fen = msg.fen;
+        this.pgn = msg.pgn;
+        this.boardManager.setPGN(msg.pgn);
+        this.freeMode = true;
+      }
 
-  if (msg.action === 'initGameState' && msg.roomId === this.roomService.getRoomId()) {
-    console.log('[WebSocket] Applying initGameState');
-    this.boardManager.setFEN(msg.fen);
-    this.fen = msg.fen;
-    this.pgn = msg.pgn;
-    this.boardManager.setPGN(msg.pgn);
-    this.freeMode = true;
-  }
-  if (msg.action === 'roomNotFound') {
-  alert(`Room "${msg.roomId}" does not exist.`);
-  this.router.navigate(['/games']);  // or show UI error
-  return;
-
-}
-});
+      if (msg.action === 'roomNotFound') {
+        alert(`Room "${msg.roomId}" does not exist.`);
+        this.router.navigate(['/games']);
+        return;
+      }
+    });
   }
 
   ngAfterViewInit(): void {
-  this.boardManager.setFEN(this.fen);
+    this.boardManager.setFEN(this.fen);
 
-  const roomFromUrl = this.route.snapshot.queryParamMap.get('room');
-  if (roomFromUrl) {
-    this.roomService.setRoomId(roomFromUrl);
-    this.wsService.sendMessage('joinRoom', { roomId: roomFromUrl });
+    const roomFromUrl = this.route.snapshot.queryParamMap.get('room');
+    if (roomFromUrl) {
+      this.roomService.setRoomId(roomFromUrl);
+      this.wsService.sendMessage('joinRoom', { roomId: roomFromUrl });
+    }
   }
-}
-
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
   }
 
-  // === Chess Logic ===
-  private broadcastState(action = 'boardState'): void {
-  this.wsService.sendMessage(action, {
-    roomId: this.roomService.getRoomId(),
-    fen: this.boardManager.getFEN(),
-    pgn: this.boardManager.getPGN()
-  });
-}
+  joinGame() {
+    const trimmedRoom = this.joinCode.trim();
+    this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+    this.pgn = '';
+    this.freeMode = false;
 
+    this.roomService.setRoomId(trimmedRoom);
+    this.wsService.connect();
+    this.wsService.sendMessage('joinRoom', { roomId: trimmedRoom });
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { room: trimmedRoom },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  createGame() {
+    const roomId = nanoid(6).toUpperCase();
+    this.roomService.setRoomId(roomId);
+    this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+    this.freeMode = true;
+
+    this.wsService.connect();
+    this.wsService.sendMessage('createRoom', {
+      roomId,
+      fen: this.boardManager.getFEN(),
+      pgn: this.boardManager.getPGN()
+    });
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { room: roomId },
+      queryParamsHandling: 'merge',
+    });
+
+    setTimeout(() => {
+      if (this.boardManager) {
+        this.boardManager.setFEN('8/8/8/8/8/8/8/8 w - - 0 1');
+        this.fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+        this.freeMode = true;
+      }
+    }, 1);
+  }
+
+  onMove(event: { from: string; to: string }): void {
+    const fen = this.boardManager.getFEN();
+    const pgn = this.boardManager.getPGN();
+    this.wsService.sendMessage('sendMove', {
+      roomId: this.roomService.getRoomId(),
+      move: { from: event.from, to: event.to },
+      fen,
+      pgn
+    });
+  }
+
+  private broadcastState(action = 'boardState'): void {
+    this.wsService.sendMessage(action, {
+      roomId: this.roomService.getRoomId(),
+      fen: this.boardManager.getFEN(),
+      pgn: this.boardManager.getPGN()
+    });
+  }
   toggleDarkMode(enabled: boolean): void {
     this.isDarkMode = enabled;
     document.body.classList.toggle('light-mode', !enabled);
@@ -316,12 +337,11 @@ this.router.navigate([], {
   }
 
   placePieceOnBoard(square: string, piece: { name: string; color: string }) {
-  const type = this.mapPieceNameToPieceType(piece.name);
-  const color = piece.color === 'white' ? ColorInput.LIGHT : ColorInput.DARK;
-  this.boardManager.addPiece(type, color, square);
-  this.broadcastState('boardState');
-}
-
+    const type = this.mapPieceNameToPieceType(piece.name);
+    const color = piece.color === 'white' ? ColorInput.LIGHT : ColorInput.DARK;
+    this.boardManager.addPiece(type, color, square);
+    this.broadcastState('boardState');
+  }
 
   private mapPieceNameToPieceType(name: string): PieceTypeInput {
     switch (name.toLowerCase()) {
@@ -354,10 +374,10 @@ this.router.navigate([], {
     this.broadcastState();
   }
 
-  public setFen():void {
-  this.boardManager.setFEN(this.fen);
-  this.broadcastState();
-}
+  public setFen(): void {
+    this.boardManager.setFEN(this.fen);
+    this.broadcastState();
+  }
 
   public moveManual(): void { this.boardManager.move(this.manualMove); }
 
@@ -447,37 +467,40 @@ this.router.navigate([], {
   }
 
   public moveCallback(move: MoveChange): void {
-  this.fen = this.boardManager.getFEN();
-  this.pgn = this.boardManager.getPGN();
+    this.fen = this.boardManager.getFEN();
+    this.pgn = this.boardManager.getPGN();
 
-  // Save in local history
-  const newMove: CustomMoveHistory = {
-    move: move.move,
-    fen: this.fen,
-    pgn: this.pgn
-  };
-  this.moveHistory = this.moveHistory.slice(0, this.currentStateIndex + 1);
-  this.moveHistory.push(newMove);
-  this.currentStateIndex = this.moveHistory.length - 1;
+    const newMove: CustomMoveHistory = {
+      move: move.move,
+      fen: this.fen,
+      pgn: this.pgn
+    };
 
-  // Broadcast move to backend
-  const from = move.move.substring(0, 2);
-  const to = move.move.substring(2, 4);
-  this.wsService.sendMessage('sendMove', {
-    roomId: this.roomService.getRoomId(),
-    move: { from, to },
-    fen: this.fen,
-    pgn: this.pgn
-  });
-}
+    this.moveHistory = this.moveHistory.slice(0, this.currentStateIndex + 1);
+    this.moveHistory.push(newMove);
+    this.currentStateIndex = this.moveHistory.length - 1;
 
-
-  copyToClipboard(text: string): void {
-  navigator.clipboard.writeText(text).then(() => {
-    alert('Link copied to clipboard!');
-  }).catch(err => {
-    console.error('Failed to copy:', err);
+    const from = move.move.substring(0, 2);
+    const to = move.move.substring(2, 4);
+    this.wsService.sendMessage('sendMove', {
+      roomId: this.roomService.getRoomId(),
+      move: { from, to },
+      fen: this.fen,
+      pgn: this.pgn
     });
   }
 
+  copyToClipboard(text: string): void {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Link copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+    });
+  }
+
+  async logout() {
+    await signOut();
+    this.user.set(null);
+    this.router.navigate(['/home']);
+  }
 }

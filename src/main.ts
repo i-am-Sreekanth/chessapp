@@ -1,7 +1,8 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { Amplify } from 'aws-amplify';
-
+import { WebSocketService } from './app/services/websocket.service';
+import { provideHttpClient } from '@angular/common/http';
 import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
 
@@ -24,5 +25,5 @@ Amplify.configure({
 });
 
 bootstrapApplication(AppComponent, {
-  providers: [provideRouter(routes)]
+  providers: [provideRouter(routes),WebSocketService, provideHttpClient()]
 }).catch(err => console.error(err));

@@ -15,6 +15,14 @@
     >
       <span class="navbar-toggler-icon"></span>
     </button>
+    <button
+  *ngIf="loggedIn"
+  (click)="logout()"
+  class="logout-button"
+  aria-label="Logout"
+>
+  Logout
+</button>
     <a class="navbar-brand ms-2" href="#">Chess App</a>
   </div>
 </nav>
@@ -183,6 +191,22 @@
 
     </div>
   </div>
+  <!-- CHAT PANEL -->
+  <div class="right-panel">
+  <dx-chat
+    [user]="currentUser"
+    [items]="messages"
+    [typingUsers]="typingUsers"
+    [showAvatar]="true"
+    [showDayHeaders]="false"
+    (onMessageEntered)="onMessageEntered($event)"
+    (onTypingStart)="onTypingStart()"
+    (onTypingEnd)="onTypingEnd()"
+    [width]="400"
+    [height]="'100%'">
+  </dx-chat>
+</div>
+
 
   <!-- Message if no room joined -->
   <ng-template #notInRoom>

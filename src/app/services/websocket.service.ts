@@ -1,28 +1,43 @@
 import { Injectable } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Subject, Observable } from 'rxjs';
 
-@Injectable({
-  providedIn: 'root'
-})
-export class WebsocketService {
-  private socket: WebSocket | null = null;
+@Injectable({ providedIn: 'root' })
+export class WebSocketService {
+  private sock1 = new WebSocket('wss://your-signaling-server');
+  private incoming = new Subject<{ type: string, payload: any }>();
+  private socket2: WebSocket | null = null;
   private messageSubject = new Subject<any>();
+  private readonly WS_URL2 = 'wss://mse1rzqm0g.execute-api.ap-southeast-2.amazonaws.com/production/';
 
-  private readonly WS_URL = 'wss://mse1rzqm0g.execute-api.ap-southeast-2.amazonaws.com/production/';
+  constructor() {
+    this.sock1.onmessage = evt => {
+      this.incoming.next(JSON.parse(evt.data));
+    };
+  }
 
+  /*moves*/
+  onReceive(): Observable<any> {
+    return this.incoming.asObservable();
+  }
+
+  send(msg: any) {
+    this.sock1.send(JSON.stringify(msg));
+  }
+
+  /*chat*/
   connect(): void {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      this.socket = new WebSocket(this.WS_URL);
+    if (!this.socket2 || this.socket2.readyState !== WebSocket.OPEN) {
+      this.socket2 = new WebSocket(this.WS_URL2);
 
-      this.socket.onopen = () => {
-        console.log('[WebSocket] Connected');
+      this.socket2.onopen = () => {
+        console.log('[WebSocket2] Connected');
       };
 
-      this.socket.onmessage = (event) => {
+      this.socket2.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
         if (data.action === 'initGameState') {
-          console.log('[WebSocket] Received initGameState');
+          console.log('[WebSocket2] Received initGameState');
           this.messageSubject.next({
             type: 'init',
             fen: data.fen,
@@ -36,22 +51,22 @@ export class WebsocketService {
             pgn: data.pgn
           });
         } else {
-          console.log('[WebSocket] Unknown action:', data);
+          console.log('[WebSocket2] Unknown action:', data);
         }
       };
 
-      this.socket.onerror = (err) => {
-        console.error('[WebSocket] Error:', err);
+      this.socket2.onerror = (err) => {
+        console.error('[WebSocket2] Error:', err);
       };
 
-      this.socket.onclose = () => {
-        console.warn('[WebSocket] Disconnected');
+      this.socket2.onclose = () => {
+        console.warn('[WebSocket2] Disconnected');
       };
     }
   }
 
   sendMove(roomId: string, move: { from: string; to: string }, fen: string, pgn: string): void {
-    if (this.socket?.readyState === WebSocket.OPEN) {
+    if (this.socket2?.readyState === WebSocket.OPEN) {
       const msg = JSON.stringify({
         action: 'sendMove',
         roomId,
@@ -59,26 +74,26 @@ export class WebsocketService {
         fen,
         pgn
       });
-      this.socket.send(msg);
+      this.socket2.send(msg);
     } else {
-      console.warn('[WebSocket] Cannot send move, socket not open');
+      console.warn('[WebSocket2] Cannot send move, socket not open');
     }
   }
 
   sendMessage(action: string, payload: any): void {
-    if (this.socket?.readyState === WebSocket.OPEN) {
+    if (this.socket2?.readyState === WebSocket.OPEN) {
       const msg = JSON.stringify({ action, ...payload });
-      this.socket.send(msg);
+      this.socket2.send(msg);
     } else {
-      console.warn('[WebSocket] Cannot send, socket not open');
+      console.warn('[WebSocket2] Cannot send, socket not open');
     }
   }
 
   disconnect(): void {
-    this.socket?.close();
+    this.socket2?.close();
   }
 
-  onMessage() {
+  onMessage(): Observable<any> {
     return this.messageSubject.asObservable();
   }
 }
