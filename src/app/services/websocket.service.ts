@@ -5,6 +5,7 @@ import { Subject, Observable } from 'rxjs';
 export class WebSocketService {
   private sock1 = new WebSocket('wss://your-signaling-server');
   private incoming = new Subject<{ type: string, payload: any }>();
+
   private socket2: WebSocket | null = null;
   private messageSubject = new Subject<any>();
   private readonly WS_URL2 = 'wss://mse1rzqm0g.execute-api.ap-southeast-2.amazonaws.com/production/';
@@ -15,7 +16,7 @@ export class WebSocketService {
     };
   }
 
-  /*moves*/
+  /* signaling moves */
   onReceive(): Observable<any> {
     return this.incoming.asObservable();
   }
@@ -24,7 +25,7 @@ export class WebSocketService {
     this.sock1.send(JSON.stringify(msg));
   }
 
-  /*chat*/
+  /* multiplayer chess */
   connect(): void {
     if (!this.socket2 || this.socket2.readyState !== WebSocket.OPEN) {
       this.socket2 = new WebSocket(this.WS_URL2);
@@ -48,7 +49,8 @@ export class WebSocketService {
             type: 'move',
             move: data.move,
             fen: data.fen,
-            pgn: data.pgn
+            pgn: data.pgn,
+            roomId: data.roomId
           });
         } else {
           console.log('[WebSocket2] Unknown action:', data);
@@ -65,6 +67,7 @@ export class WebSocketService {
     }
   }
 
+  /* emit move */
   sendMove(roomId: string, move: { from: string; to: string }, fen: string, pgn: string): void {
     if (this.socket2?.readyState === WebSocket.OPEN) {
       const msg = JSON.stringify({
@@ -80,6 +83,7 @@ export class WebSocketService {
     }
   }
 
+  /* generic emitter */
   sendMessage(action: string, payload: any): void {
     if (this.socket2?.readyState === WebSocket.OPEN) {
       const msg = JSON.stringify({ action, ...payload });
@@ -89,10 +93,12 @@ export class WebSocketService {
     }
   }
 
+  /* disconnect */
   disconnect(): void {
     this.socket2?.close();
   }
 
+  /* on move/messages */
   onMessage(): Observable<any> {
     return this.messageSubject.asObservable();
   }

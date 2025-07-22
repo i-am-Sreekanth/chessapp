@@ -29,6 +29,7 @@ import { Subscription } from 'rxjs';
 import { ChatComponent } from '../chat/chat.component';
 import { DxChatModule } from 'devextreme-angular';
 import { DxChatTypes } from 'devextreme-angular/ui/chat';
+import { ChessRoomService } from 'src/app/services/chess.service';
 
 interface CustomMoveHistory {
   move: string;
@@ -52,6 +53,7 @@ interface CustomMoveHistory {
 export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   @ViewChild('board') boardManager!: NgxChessBoardComponent;
   @ViewChild('fenManager') fenManager!: FenComponent;
+
 
   player1Name: string = 'player 1';
   player2Name: string = 'player 2';
@@ -89,6 +91,7 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   loggedIn = false;
   redirecting = false;
   userEmail: string = '';
+  userID: string = '';
   user = signal<any | null>(null);
 
   whitePaletteCounts: { [key: string]: number } = {
@@ -117,13 +120,14 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
     private route: ActivatedRoute,
     public roomService: RoomService,
     private cdr: ChangeDetectorRef,
+    private chessRoomService: ChessRoomService,
     private wsService: WebSocketService
   ) {
     ['King', 'Queen', 'Rook', 'Bishop', 'Knight', 'Pawn'].forEach(piece => {
       this.whitePieces.set(piece, 0);
       this.blackPieces.set(piece, 0);
     });
-
+      
     // WebSocket subscription for chat
     this.wsService.onReceive().subscribe(msg => {
       if (msg.type === 'chat') {
@@ -157,6 +161,7 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
       e.component.reset();
     }
   }
+  
   async ngOnInit() {
     const result = await isUserLoggedIn();
     this.loggedIn = result;
@@ -171,7 +176,8 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
       try {
         const user = await getCurrentUser();
         console.log('User Info:', user);
-        this.userEmail = user.signInDetails?.loginId || user.username || 'Unknown';
+        this.userEmail = user.username;
+        this.userID=user.userId;
         this.cdr.detectChanges();
       } catch (err) {
         console.error('🔴 Could not fetch user info:', err);
@@ -179,8 +185,10 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
     }
 
     this.sub = this.wsService.onMessage().subscribe((msg) => {
-      console.log('[WebSocket] Incoming Message:', msg);
-
+      if (msg.action === 'playerJoined' && msg.roomId === this.roomService.getRoomId()) {
+        console.log('🟢 Another player joined the room:', msg.newConnectionId);
+        alert('Second player joined! Game can now start.');
+      }
       if (msg.action === 'move' && msg.roomId === this.roomService.getRoomId()) {
         this.boardManager.move(`${msg.move.from}${msg.move.to}`);
         this.fen = msg.fen;
@@ -467,28 +475,31 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
   }
 
   public moveCallback(move: MoveChange): void {
-    this.fen = this.boardManager.getFEN();
-    this.pgn = this.boardManager.getPGN();
+  this.fen = this.boardManager.getFEN();
+  this.pgn = this.boardManager.getPGN();
 
-    const newMove: CustomMoveHistory = {
-      move: move.move,
-      fen: this.fen,
-      pgn: this.pgn
-    };
+  const newMove: CustomMoveHistory = {
+    move: move.move,
+    fen: this.fen,
+    pgn: this.pgn
+  };
 
-    this.moveHistory = this.moveHistory.slice(0, this.currentStateIndex + 1);
-    this.moveHistory.push(newMove);
-    this.currentStateIndex = this.moveHistory.length - 1;
+  this.moveHistory = this.moveHistory.slice(0, this.currentStateIndex + 1);
+  this.moveHistory.push(newMove);
+  this.currentStateIndex = this.moveHistory.length - 1;
 
-    const from = move.move.substring(0, 2);
-    const to = move.move.substring(2, 4);
-    this.wsService.sendMessage('sendMove', {
-      roomId: this.roomService.getRoomId(),
-      move: { from, to },
-      fen: this.fen,
-      pgn: this.pgn
-    });
-  }
+  const from = move.move.substring(0, 2);
+  const to = move.move.substring(2, 4);
+
+  // Broadcast move to room via WebSocket
+  this.wsService.sendMessage('sendMove', {
+    roomId: this.roomService.getRoomId(),
+    move: { from, to },
+    fen: this.fen,
+    pgn: this.pgn
+  });
+}
+
 
   copyToClipboard(text: string): void {
     navigator.clipboard.writeText(text).then(() => {
@@ -503,4 +514,5 @@ export class GameComponent implements AfterViewInit, OnInit, OnDestroy {
     this.user.set(null);
     this.router.navigate(['/home']);
   }
+  
 }
